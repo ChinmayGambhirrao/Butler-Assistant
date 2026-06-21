@@ -22,7 +22,7 @@ Based on the user's message, you must:
 
 CRITICAL: When the user asks to ADD a task, include it with completed: false. If they say "daily" or "every day" or "recurring", set is_recurring: true. When they ask to REMOVE a task, omit it from the list. When they MARK a task as done, set completed: true. When they ask to UNDO a removal, add the task back.
 
-Always respond in this JSON format and nothing else:
+ALWAYS respond ONLY with valid JSON. Never add text before or after the JSON object. Never add markdown. Never use single quotes. Use this exact format:
 {
   "message": "Your warm butler response here, addressing the user as sir",
   "tasks": {
@@ -111,25 +111,40 @@ function computeStreak(tasks) {
 
 function parseButlerJSON(content) {
   let cleaned = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
-  try { return JSON.parse(cleaned) } catch {}
+
+  const tryParse = (str) => {
+    try {
+      const parsed = JSON.parse(str)
+      if (parsed && typeof parsed === 'object') return parsed
+    } catch {}
+    return null
+  }
+
+  let result = tryParse(cleaned)
+  if (result?.message) return result
 
   const first = cleaned.indexOf('{')
   const last = cleaned.lastIndexOf('}')
   if (first !== -1 && last !== -1 && last > first) {
     const candidate = cleaned.slice(first, last + 1)
-    try { return JSON.parse(candidate) } catch {}
+
+    result = tryParse(candidate)
+    if (result?.message) return result
 
     const fixedKeys = candidate.replace(/([{,]\s*)([a-zA-Z_][a-zA-Z0-9_]*)\s*:/g, '$1"$2":')
-    try { return JSON.parse(fixedKeys) } catch {}
+    result = tryParse(fixedKeys)
+    if (result?.message) return result
 
     const unquoted = fixedKeys.replace(/:\s*'([^']*)'/g, ':"$1"')
-    try { return JSON.parse(unquoted) } catch {}
+    result = tryParse(unquoted)
+    if (result?.message) return result
 
     const doubleQuoted = fixedKeys.replace(/'/g, '"')
-    try { return JSON.parse(doubleQuoted) } catch {}
+    result = tryParse(doubleQuoted)
+    if (result?.message) return result
   }
 
-  throw new Error('Invalid response format from butler. Raw: ' + cleaned.slice(0, 200))
+  return { message: cleaned, tasks: null }
 }
 
 function mostCompletedTask(tasks) {
@@ -413,7 +428,6 @@ export default function App() {
       if (!content) throw new Error('Empty response from API')
 
       const parsed = parseButlerJSON(content)
-      if (!parsed.message) throw new Error('Response missing message')
 
       setMessages(prev => [...prev, { role: 'butler', text: parsed.message }])
       if (parsed.tasks) await syncTasks(parsed.tasks)
