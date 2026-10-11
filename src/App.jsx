@@ -10,6 +10,8 @@ const CATEGORIES = ['health', 'work', 'personal']
 const CATEGORY_COLORS = { health: 'rose', work: 'blue', personal: 'amber' }
 const CATEGORY_LABELS = { health: 'Health', work: 'Work', personal: 'Personal' }
 
+const NVIDIA_MODEL_CANDIDATES = ['openai/gpt-oss-20b', 'meta/llama-3.3-70b-instruct']
+
 const SYSTEM_PROMPT = `You are a personal butler assistant. You manage the user's task list across three categories: Health, Work, and Personal. You respond in a warm, conversational tone — like a respectful and efficient butler. Address the user as "sir".
 
 When the user asks what's on their plate, give a morning-briefing style response — natural, flowing, not bullet points.
@@ -271,12 +273,25 @@ export default function App() {
       'Content-Type': 'application/json',
       ...(isProd ? {} : { 'Authorization': `Bearer ${import.meta.env.VITE_NVIDIA_API_KEY}` }),
     }
-    const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) })
-    if (!res.ok) {
-      const err = await res.text().catch(() => '')
-      throw new Error(`API error ${res.status}: ${err.slice(0, 200)}`)
+
+    let lastError = null
+    for (const model of NVIDIA_MODEL_CANDIDATES) {
+      try {
+        const payload = { ...body, model }
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(payload) })
+        const text = await res.text()
+        if (!res.ok) {
+          const err = text.slice(0, 200)
+          lastError = new Error(`API error ${res.status}: ${err}`)
+          continue
+        }
+        return JSON.parse(text)
+      } catch (err) {
+        lastError = err
+      }
     }
-    return await res.json()
+
+    throw lastError || new Error('Unable to reach NVIDIA API')
   }, [])
 
   async function syncTasks(aiTaskMap) {
@@ -372,7 +387,6 @@ export default function App() {
 
     try {
       const completion = await callNvidia({
-        model: 'nvidia/llama-3.3-nemotron-super-49b-v1',
         messages: [
           { role: 'system', content: WEEKLY_REVIEW_PROMPT },
           { role: 'user', content: `Here is my weekly data: ${JSON.stringify(dataForAI)}` },
@@ -416,7 +430,6 @@ export default function App() {
 
     try {
       const completion = await callNvidia({
-        model: 'nvidia/llama-3.3-nemotron-super-49b-v1',
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: userContent },

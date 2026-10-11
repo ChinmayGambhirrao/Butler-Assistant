@@ -26,6 +26,8 @@ serve(async (req) => {
       return new Response('No subscribers', { status: 200 })
     }
 
+    const modelCandidates = ['openai/gpt-oss-20b', 'meta/llama-3.3-70b-instruct']
+
     for (const sub of subscriptions) {
       const { data: tasks } = await supabase
         .from('tasks')
@@ -38,31 +40,46 @@ serve(async (req) => {
         ? tasks.map(t => `${t.text} (${t.category})`).join(', ')
         : 'No pending tasks'
 
-      const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${nvidiaApiKey}`,
-        },
-        body: JSON.stringify({
-          model: 'nvidia/llama-3.3-nemotron-super-49b-v1',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a personal butler assistant. Greet the user warmly as "sir". Give a 2-3 sentence morning briefing of what tasks are pending today. Be warm, conversational, and encouraging. Output ONLY the message text, no JSON.',
-            },
-            {
-              role: 'user',
-              content: `Today's pending tasks: ${pendingText}`,
-            },
-          ],
-          temperature: 0.7,
-          max_tokens: 150,
-        }),
-      })
+      let briefing = 'Good morning sir! Have a wonderful day.'
+      let lastError = null
 
-      const data = await response.json()
-      const briefing = data.choices?.[0]?.message?.content || 'Good morning sir! Have a wonderful day.'
+      for (const model of modelCandidates) {
+        try {
+          const response = await fetch('https://integrate.api.nvidia.com/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${nvidiaApiKey}`,
+            },
+            body: JSON.stringify({
+              model,
+              messages: [
+                {
+                  role: 'system',
+                  content: 'You are a personal butler assistant. Greet the user warmly as "sir". Give a 2-3 sentence morning briefing of what tasks are pending today. Be warm, conversational, and encouraging. Output ONLY the message text, no JSON.',
+                },
+                {
+                  role: 'user',
+                  content: `Today's pending tasks: ${pendingText}`,
+                },
+              ],
+              temperature: 0.7,
+              max_tokens: 150,
+            }),
+          })
+
+          const data = await response.json()
+          briefing = data.choices?.[0]?.message?.content || briefing
+          break
+        } catch (err) {
+          lastError = err
+          continue
+        }
+      }
+
+      if (lastError) {
+        console.error('NVIDIA brief generation failed:', lastError)
+      }
 
       await webPush.sendNotification(
         sub.subscription,
