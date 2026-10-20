@@ -2,6 +2,44 @@ import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import webPush from 'npm:web-push'
 
+function buildMorningBriefing(tasks: Array<{ text: string; category: string; due_date?: string | null; priority?: string; completed?: boolean }>) {
+  const pending = (tasks || []).filter(task => !task.completed)
+  if (pending.length === 0) {
+    return 'Good morning sir. Your day is beautifully clear and your schedule is calm.'
+  }
+
+  const dueToday = pending.filter(task => task.due_date === new Date().toISOString().slice(0, 10))
+  const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 }
+  const topTasks = [...pending]
+    .sort((a, b) => {
+      const priorityDiff = (priorityOrder[a.priority || 'medium'] ?? 1) - (priorityOrder[b.priority || 'medium'] ?? 1)
+      if (priorityDiff !== 0) return priorityDiff
+      const left = a.due_date || '9999-12-31'
+      const right = b.due_date || '9999-12-31'
+      return left.localeCompare(right)
+    })
+    .slice(0, 3)
+
+  const dueText = dueToday.length > 0
+    ? `${dueToday.length} task${dueToday.length > 1 ? 's' : ''} due today`
+    : 'No tasks are due today'
+
+  const focusText = topTasks.length > 0
+    ? `Your priorities are ${topTasks.map((task, index) => `${index + 1}. ${task.text}`).join(' • ')}`
+    : 'Your plate is clear for now'
+
+  const categoryCounts = ['health', 'work', 'personal'].map(category => ({
+    category,
+    count: pending.filter(task => task.category === category).length,
+  })).filter(item => item.count > 0)
+
+  const categoryText = categoryCounts.length > 0
+    ? `You currently have ${categoryCounts.map(item => `${item.count} ${item.category}`).join(', ')} in motion`
+    : 'There are no active tasks right now'
+
+  return `Good morning sir. ${dueText}. ${focusText}. ${categoryText}. Start with the first priority and keep the momentum steady.`
+}
+
 serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
@@ -40,7 +78,7 @@ serve(async (req) => {
         ? tasks.map(t => `${t.text} (${t.category})`).join(', ')
         : 'No pending tasks'
 
-      let briefing = 'Good morning sir! Have a wonderful day.'
+      let briefing = buildMorningBriefing(tasks || [])
       let lastError = null
 
       for (const model of modelCandidates) {
