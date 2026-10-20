@@ -562,7 +562,6 @@ export default function App() {
 
   const dueToday = tasks.filter(t => t.due_date === todayStr() && !t.completed).length
   const totalTasks = tasks.filter(t => !t.completed).length
-  const topPriorityTasks = getTopPriorityTasks(tasks)
   const dailyBriefText = buildDailyBriefing(tasks)
 
   const completedThisWeek = tasks.filter(t => t.completed && t.completed_at >= daysAgo(7)).length
@@ -687,41 +686,6 @@ export default function App() {
 
         <main className="flex-1 flex flex-col min-w-0">
           <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
-            <div className="rounded-2xl border border-indigo-700/40 bg-gradient-to-br from-slate-800 to-slate-900 p-4 shadow-lg shadow-slate-950/20">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div>
-                  <p className="text-[10px] uppercase tracking-[0.18em] text-indigo-300">Daily Brief</p>
-                  <h2 className="text-base font-semibold text-slate-100">Your priorities for today</h2>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setMessages(prev => [...prev, { role: 'butler', text: dailyBriefText }])}
-                  className="text-[11px] text-indigo-300 hover:text-indigo-200 border border-indigo-600/50 rounded-full px-2.5 py-1"
-                >
-                  Refresh brief
-                </button>
-              </div>
-
-              <p className="text-sm leading-relaxed text-slate-200">{dailyBriefText}</p>
-
-              {topPriorityTasks.length > 0 && (
-                <div className="mt-4 grid gap-2 sm:grid-cols-3">
-                  {topPriorityTasks.map((task, index) => (
-                    <div key={task.id} className="rounded-xl border border-slate-700 bg-slate-800/70 p-3">
-                      <span className="text-[10px] uppercase tracking-[0.12em] text-slate-400">Priority {index + 1}</span>
-                      <p className="mt-2 text-sm font-medium text-slate-100">{task.text}</p>
-                      <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
-                        {task.priority && task.priority !== 'medium' && (
-                          <span className={priorityColor(task.priority)}>{task.priority}</span>
-                        )}
-                        {task.due_date && <span>{formatDate(task.due_date)}</span>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} fade-in`}>
                 <div
